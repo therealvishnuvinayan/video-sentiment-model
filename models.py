@@ -72,11 +72,7 @@ class AudioEncoder(nn.Module):
         
     def forward(self, x):
         x = x.squeeze(1)
+        features = self.conv_layers(x)
+        #Features output : [batch_size, 128, 1]
 
-if __name__ == '__main__':
-    batch_size = 2
-    x = torch.randn(batch_size, 1, 64, 300)
-    print(f'1. Input shape {x.shape}')
-
-    x.squeezed = x.squeeze(1)
-    print(f'2. Squeezed shape: {x.squeezed.shape}')
+        return self.projection(features.squeeze(-1))
