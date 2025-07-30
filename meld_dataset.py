@@ -1,5 +1,6 @@
 from torch.utils.data import Dataset, DataLoader
 import pandas as pd
+import torch.utils.data.dataloader
 from transformers import AutoTokenizer
 import os
 import cv2
@@ -7,12 +8,13 @@ import numpy as np
 import torch
 import subprocess
 import torchaudio
-os.environ['TOKENIZERS_PARALLELISM'] = 'false'
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class MELDDataset(Dataset):
     def __init__(self, csv_path, video_dir):
         self.data = pd.read_csv(csv_path)
+
         self.video_dir = video_dir
 
         self.tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
@@ -31,17 +33,17 @@ class MELDDataset(Dataset):
 
         try:
             if not cap.isOpened():
-                raise ValueError(f'Video not found/not opening {video_path}')
+                raise ValueError(f"Video not found: {video_path}")
 
             # Try and read first frame to validate video
             ret, frame = cap.read()
             if not ret or frame is None:
-                raise ValueError(f'Video not found/not opening {video_path}')
+                raise ValueError(f"Video not found: {video_path}")
 
             # Reset index to not skip first frame
             cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
 
-            while (len(frames)) < 30 and cap.isOpened:
+            while len(frames) < 30 and cap.isOpened():
                 ret, frame = cap.read()
                 if not ret:
                     break
@@ -51,12 +53,12 @@ class MELDDataset(Dataset):
                 frames.append(frame)
 
         except Exception as e:
-            raise ValueError(f'video error: {str(e)}')
+            raise ValueError(f"Video error: {str(e)}")
         finally:
             cap.release()
 
         if (len(frames) == 0):
-            raise ValueError('No frames could be extracted')
+            raise ValueError("No frames could be extracted")
 
         # Pad or truncate frames
         if len(frames) < 30:
@@ -66,7 +68,6 @@ class MELDDataset(Dataset):
 
         # Before permute: [frames, height, width, channels]
         # After permute: [frames, channels, height, width]
-
         return torch.FloatTensor(np.array(frames)).permute(0, 3, 1, 2)
 
     def _extract_audio_features(self, video_path):
@@ -110,11 +111,9 @@ class MELDDataset(Dataset):
             return mel_spec
 
         except subprocess.CalledProcessError as e:
-            raise ValueError(f'Audio extraction failure {str(e)}')
-
+            raise ValueError(f"Audio extraction error: {str(e)}")
         except Exception as e:
-            raise ValueError(f'Audio error: {str(e)}')
-
+            raise ValueError(f"Audio error: {str(e)}")
         finally:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
@@ -123,24 +122,25 @@ class MELDDataset(Dataset):
         return len(self.data)
 
     def __getitem__(self, idx):
-
         if isinstance(idx, torch.Tensor):
             idx = idx.item()
         row = self.data.iloc[idx]
 
         try:
+            video_filename = f"""dia{row['Dialogue_ID']}_utt{
+                row['Utterance_ID']}.mp4"""
 
-            row = self.data.iloc[idx]
-            video_filename = f'dia{row["Dialogue_ID"]}_utt{row["Utterance_ID"]}.mp4'
             path = os.path.join(self.video_dir, video_filename)
             video_path_exists = os.path.exists(path)
 
             if video_path_exists == False:
-                raise FileNotFoundError(
-                    f'No video found for the filename: {path}')
+                raise FileNotFoundError(f"No video found for filename: {path}")
 
-            text_inputs = self.tokenizer(
-                row['Utterance'], padding='max_length', truncation=True, max_length=128, return_tensors='pt')
+            text_inputs = self.tokenizer(row['Utterance'],
+                                         padding='max_length',
+                                         truncation=True,
+                                         max_length=128,
+                                         return_tensors='pt')
 
             video_frames = self._load_video_frames(path)
             audio_features = self._extract_audio_features(path)
@@ -160,33 +160,40 @@ class MELDDataset(Dataset):
                 'sentiment_label': torch.tensor(sentiment_label)
             }
         except Exception as e:
-            print(f'Error processing {path}: {str(e)}')
+            print(f"Error processing {path}: {str(e)}")
             return None
 
 
 def collate_fn(batch):
-    # Filter out None samples
+    # Filter oout None samples
     batch = list(filter(None, batch))
     return torch.utils.data.dataloader.default_collate(batch)
 
 
-def prepare_dataloaders(train_csv, train_video_dir, dev_csv, dev_video_dir, test_csv, test_video_dir, batch_size=32):
+def prepare_dataloaders(train_csv, train_video_dir,
+                        dev_csv, dev_video_dir,
+                        test_csv, test_video_dir, batch_size=32):
     train_dataset = MELDDataset(train_csv, train_video_dir)
     dev_dataset = MELDDataset(dev_csv, dev_video_dir)
     test_dataset = MELDDataset(test_csv, test_video_dir)
 
-    train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True)
-    dev_loader = DataLoader(dev_dataset, batch_size=batch_size)
-    test_loader = DataLoader(test_dataset, batch_size=batch_size)
+    train_loader = DataLoader(train_dataset,
+                              batch_size=batch_size,
+                              shuffle=True,
+                              collate_fn=collate_fn)
+
+    dev_loader = DataLoader(dev_dataset,
+                            batch_size=batch_size,
+                            collate_fn=collate_fn)
+
+    test_loader = DataLoader(test_dataset,
+                             batch_size=batch_size,
+                             collate_fn=collate_fn)
 
     return train_loader, dev_loader, test_loader
 
 
-if __name__ == '__main__':
-    # meld = MELDDataset('../dataset/dev/dev_sent_emo.csv',
-    #                    '../dataset/dev/dev_splits_complete')
-
+if __name__ == "__main__":
     train_loader, dev_loader, test_loader = prepare_dataloaders(
         '../dataset/train/train_sent_emo.csv', '../dataset/train/train_splits',
         '../dataset/dev/dev_sent_emo.csv', '../dataset/dev/dev_splits_complete',
