@@ -1,0 +1,26 @@
+# Python junk
+__pycache__/
+*.pyc
+*.pyo
+
+# Virtual environments
+.venv/
+env/
+venv/
+
+# OS files
+.DS_Store
+
+# Large files
+*.tar.gz
+*.mp4
+*.wav
+*.zip
+
+# TensorBoard logs
+*.tfevents.*
+
+# VSCode workspace settings (optional)
+.vscode/
+
+
