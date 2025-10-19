@@ -23,4 +23,6 @@ venv/
 # VSCode workspace settings (optional)
 .vscode/
 
+.env
+
 
